@@ -30,7 +30,7 @@ cl-repo test                                  # library: Rove, fresh SBCL image
 cl-repo test --system cl-stack-sample/agent   # agent: mock LLM, offline
 ```
 
-`cl-repo sync` installs every `:depends-on` from `ghcr.io/egao1980/cl-systems`. Nothing goes in `CL_SOURCE_REGISTRY`, and there is no `ql:quickload`. CI runs the same two commands through [`test-system.yml`](https://github.com/egao1980/cl-repository/blob/main/.github/workflows/test-system.yml).
+`cl-repo sync`, which `test` and `run` call first, installs the `:depends-on` of every system in the `.asd` (library, tests, agent) from `ghcr.io/egao1980/cl-systems`. This needs cl-repo client 0.27.17 or later. Nothing goes in `CL_SOURCE_REGISTRY`, and there is no `ql:quickload`. CI runs the same two commands through [`test-system.yml`](https://github.com/egao1980/cl-repository/blob/main/.github/workflows/test-system.yml).
 
 ## 3. Work on it with Claude Code
 
@@ -68,13 +68,13 @@ Other agents (Cursor, Codex) read [`AGENTS.md`](AGENTS.md), which points to the 
 
 ```bash
 export ANTHROPIC_API_KEY=…                 # default provider
-cl-repo run --system cl-stack-sample/agent -- ros run \
+cl-repo run -- ros run \
   -e '(asdf:load-system "cl-stack-sample/agent")' \
   -e '(print (cl-stack-sample/agent:ask "How long is 1h30m plus 45m plus 2d?"))' \
   -e '(uiop:quit)'
 ```
 
-`--system` makes `cl-repo` install the agent system's dependencies; without it only the library's are synced. `ask` runs over the cl-stack async HTTP backend. It retries by failure class and stops after 6 steps. For a longer-running agent, with compaction, permissions, subagents and `AGENTS.md` discovery, see the [agent harness tutorial](https://github.com/egao1980/cl-stack/blob/main/docs/tutorials/agent-harness.md).
+`ask` runs over the cl-stack async HTTP backend. It retries by failure class and stops after 6 steps. For a longer-running agent, with compaction, permissions, subagents and `AGENTS.md` discovery, see the [agent harness tutorial](https://github.com/egao1980/cl-stack/blob/main/docs/tutorials/agent-harness.md).
 
 ### Choose the model provider
 
@@ -98,10 +98,10 @@ A provider is named by a designator: `"provider"` or `"provider:model"`. The mod
 
 ```bash
 # the same command, other providers:
-SAMPLE_LLM=openai:gpt-4o OPENAI_API_KEY=…            cl-repo run --system cl-stack-sample/agent -- ros run …
-SAMPLE_LLM=lmstudio:qwen/qwen3.8-27b LM_API_TOKEN=… cl-repo run --system cl-stack-sample/agent -- ros run …
-SAMPLE_LLM=ollama:llama3.1:8b                        cl-repo run --system cl-stack-sample/agent -- ros run …
-SAMPLE_LLM=mock                                      cl-repo run --system cl-stack-sample/agent -- ros run …   # offline: "echo: …"
+SAMPLE_LLM=openai:gpt-4o OPENAI_API_KEY=…            cl-repo run -- ros run …
+SAMPLE_LLM=lmstudio:qwen/qwen3.8-27b LM_API_TOKEN=… cl-repo run -- ros run …
+SAMPLE_LLM=ollama:llama3.1:8b                        cl-repo run -- ros run …
+SAMPLE_LLM=mock                                      cl-repo run -- ros run …   # offline: "echo: …"
 ```
 
 Without a model, the OpenAI-compatible providers send `OPENAI_MODEL`, or `gpt-4o-mini` when that is unset, so name the model for local servers. The model must support tool calls. Small local models sometimes answer without calling `add_durations`.
