@@ -68,13 +68,13 @@ Other agents (Cursor, Codex) read [`AGENTS.md`](AGENTS.md), which points to the 
 
 ```bash
 export ANTHROPIC_API_KEY=…                 # default provider
-cl-repo run -- ros run \
+cl-repo run --system cl-stack-sample/agent -- ros run \
   -e '(asdf:load-system "cl-stack-sample/agent")' \
   -e '(print (cl-stack-sample/agent:ask "How long is 1h30m plus 45m plus 2d?"))' \
   -e '(uiop:quit)'
 ```
 
-`ask` runs over the cl-stack async HTTP backend. It retries by failure class and stops after 6 steps. For a longer-running agent, with compaction, permissions, subagents and `AGENTS.md` discovery, see the [agent harness tutorial](https://github.com/egao1980/cl-stack/blob/main/docs/tutorials/agent-harness.md).
+`--system` makes `cl-repo` install the agent system's dependencies; without it only the library's are synced. `ask` runs over the cl-stack async HTTP backend. It retries by failure class and stops after 6 steps. For a longer-running agent, with compaction, permissions, subagents and `AGENTS.md` discovery, see the [agent harness tutorial](https://github.com/egao1980/cl-stack/blob/main/docs/tutorials/agent-harness.md).
 
 ### Choose the model provider
 
@@ -97,9 +97,11 @@ A provider is named by a designator: `"provider"` or `"provider:model"`. The mod
 | Offline echo | `mock` | none | none | none |
 
 ```bash
-SAMPLE_LLM=openai:gpt-4o OPENAI_API_KEY=… cl-repo run -- ros run …
-SAMPLE_LLM=ollama:llama3.1:8b cl-repo run -- ros run …           # ollama serve; ollama pull llama3.1:8b
-SAMPLE_LLM=mock cl-repo run -- ros run …                          # no network: prints "echo: …"
+# the same command, other providers:
+SAMPLE_LLM=openai:gpt-4o OPENAI_API_KEY=…            cl-repo run --system cl-stack-sample/agent -- ros run …
+SAMPLE_LLM=lmstudio:qwen/qwen3.8-27b LM_API_TOKEN=… cl-repo run --system cl-stack-sample/agent -- ros run …
+SAMPLE_LLM=ollama:llama3.1:8b                        cl-repo run --system cl-stack-sample/agent -- ros run …
+SAMPLE_LLM=mock                                      cl-repo run --system cl-stack-sample/agent -- ros run …   # offline: "echo: …"
 ```
 
 Without a model, the OpenAI-compatible providers send `OPENAI_MODEL`, or `gpt-4o-mini` when that is unset, so name the model for local servers. The model must support tool calls. Small local models sometimes answer without calling `add_durations`.

@@ -33,7 +33,10 @@
                (:version "llm-protocol-openai" "0.3.1")
                "json-protocol" "json-backend-jzon"
                "event-protocol" "event-backend-libuv"
-               "http-backend-async")
+               "http-backend-async"
+               ;; Content-Encoding backends: the async client advertises zstd,
+               ;; brotli and snappy and warns when one is not loaded.
+               "http-encoding-zstd" "http-encoding-brotli" "http-encoding-snappy")
   :pathname "agent"
   :serial t
   :components ((:file "agent"))
