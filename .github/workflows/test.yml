@@ -1,0 +1,19 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  library:
+    uses: egao1980/cl-repository/.github/workflows/test-system.yml@main
+    with:
+      system: cl-stack-sample
+  agent:
+    uses: egao1980/cl-repository/.github/workflows/test-system.yml@main
+    with:
+      system: cl-stack-sample/agent
+      os-json: '["ubuntu-latest"]'

@@ -1,0 +1,8 @@
+*.fasl
+*.dx64fasl
+*~
+.DS_Store
+.cl-repository/
+cl-repo.lock
+/.claude/settings.local.json
+/CLAUDE.local.md
