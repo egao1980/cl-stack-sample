@@ -1,10 +1,14 @@
 ;;;; An ai-agent-protocol agent whose one tool is this project's library.
-;;;; Live: ANTHROPIC_API_KEY set, then (cl-stack-sample/agent:ask "…").
+;;;; Pick the model provider with a "provider:model" designator: the :llm
+;;;; argument, or $SAMPLE_LLM (default "anthropic"). See *PROVIDERS*.
 ;;;; Offline: pass any llm-protocol backend, e.g. the mock one (see the tests).
 
 (defpackage #:cl-stack-sample/agent
   (:use #:cl #:ai-agent-protocol #:llm-protocol)
   (:export #:+instructions+
+           #:*providers*
+           #:*default-llm*
+           #:make-llm-backend
            #:make-duration-tool
            #:make-duration-agent
            #:use-async-http
@@ -18,6 +22,56 @@
 the add_durations tool; never add them yourself. Durations look like \"1h30m\",
 \"45s\" or \"2d 4h\". Answer in one sentence."
   "System prompt of the duration agent.")
+
+(defparameter *providers*
+  '(("anthropic"     :anthropic nil                           nil                  "claude-opus-5-5")
+    ("openai"        :openai    "https://api.openai.com/v1"   "OPENAI_API_KEY"     "gpt-4o-mini")
+    ("openrouter"    :openai    "https://openrouter.ai/api/v1" "OPENROUTER_API_KEY" "openai/gpt-4o-mini")
+    ("openai-compat" :openai    nil                           "OPENAI_API_KEY"     nil)
+    ("lmstudio"      :openai    "http://127.0.0.1:1234/v1"    "LM_API_TOKEN"       nil)
+    ("ollama"        :openai    "http://127.0.0.1:11434/v1"   nil                  nil)
+    ("vllm"          :openai    "http://127.0.0.1:8000/v1"    nil                  nil)
+    ("mock"          :mock      nil                           nil                  nil))
+  "Providers MAKE-LLM-BACKEND knows: (name kind base-url api-key-env default-model).
+KIND :ANTHROPIC uses llm-protocol-anthropic (ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL);
+:OPENAI uses llm-protocol-openai against BASE-URL (NIL: OPENAI_BASE_URL, else LM
+Studio's address); :MOCK is the offline echo backend. Push an entry to add one.")
+
+(defvar *default-llm* nil
+  "Provider designator used when none is given. NIL: $SAMPLE_LLM at the time
+the agent is made, else \"anthropic\".")
+
+(defun make-llm-backend (designator)
+  "An llm-protocol backend for DESIGNATOR, \"provider\" or \"provider:model\"
+(\"openai:gpt-4o\", \"ollama:llama3.1:8b\" — the model is everything after the
+first colon). An unknown provider signals LLM-UNKNOWN-PROVIDER with a
+USE-VALUE restart that takes a backend to use instead."
+  (check-type designator string)
+  (let* ((colon (position #\: designator))
+         (name (string-downcase (subseq designator 0 colon)))
+         (model (and colon (< (1+ colon) (length designator))
+                     (subseq designator (1+ colon))))
+         (spec (assoc name *providers* :test #'string=)))
+    (restart-case
+        (progn
+          (unless spec
+            (error 'llm-unknown-provider
+                   :name name
+                   :message (format nil "known providers: ~{~a~^, ~}"
+                                    (mapcar #'first *providers*))))
+          (destructuring-bind (kind base-url key-env default-model) (rest spec)
+            (let ((model (or model default-model))
+                  (api-key (and key-env (uiop:getenv key-env))))
+              (ecase kind
+                (:anthropic
+                 (llm-protocol-anthropic:make-anthropic-backend :default-model model))
+                (:openai
+                 (llm-protocol-openai:make-openai-compat-backend
+                  :base-url base-url :api-key api-key :default-model model))
+                (:mock (make-mock-llm-backend))))))
+      (use-value (backend)
+        :report "Use another llm-protocol backend."
+        backend))))
 
 (defun %object (&rest kvs)
   "A JSON object (string-keyed hash table) from alternating keys and values."
@@ -53,14 +107,15 @@ TOOL-INPUT-ERROR, so it is told to fix the arguments and call again."
                   (cl-stack-sample:invalid-duration (c)
                     (error 'tool-input-error :message (princ-to-string c))))))))
 
-(defun make-duration-agent (&key backend (max-steps 6))
+(defun make-duration-agent (&key backend
+                                 (llm (or *default-llm* (uiop:getenv "SAMPLE_LLM") "anthropic"))
+                                 (max-steps 6))
   "An agent that answers duration questions with the add_durations tool.
-BACKEND defaults to Anthropic (ANTHROPIC_API_KEY from the environment)."
+BACKEND is any llm-protocol backend; without it, LLM (a \"provider:model\"
+designator, default *DEFAULT-LLM*) picks one through MAKE-LLM-BACKEND."
   (make-ai-agent
    :name "durations"
-   :backend (or backend
-                (llm-protocol-anthropic:make-anthropic-backend
-                 :default-model "claude-opus-5-5"))
+   :backend (or backend (make-llm-backend llm))
    :instructions +instructions+
    :tools (list (make-duration-tool))
    :settings (make-agent-settings
@@ -80,9 +135,12 @@ BACKEND defaults to Anthropic (ANTHROPIC_API_KEY from the environment)."
        (event-protocol:with-event-loop-var (el)
          ,@body))))
 
-(defun ask (question &key backend)
-  "Ask the duration agent QUESTION; → the answer text and the run."
+(defun ask (question &key backend llm)
+  "Ask the duration agent QUESTION; → the answer text and the run.
+BACKEND is an llm-protocol backend; otherwise LLM, a \"provider:model\"
+designator (see MAKE-LLM-BACKEND), or $SAMPLE_LLM, or \"anthropic\"."
   (unless backend (use-async-http))
-  (let ((run (with-agent-loop
-               (run-ai-agent (make-duration-agent :backend backend) question))))
+  (let* ((agent (apply #'make-duration-agent :backend backend
+                       (and llm (list :llm llm))))
+         (run (with-agent-loop (run-ai-agent agent question))))
     (values (agent-run-text run) run)))

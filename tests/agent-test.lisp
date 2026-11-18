@@ -47,3 +47,25 @@ call; then it answers with the last tool result."
       (ok (search "is not a duration" (agent-invocation-result first-call)))
       (ok (search "Fix the arguments" (agent-invocation-result first-call))))
     (ok (equal "Total: 1h5m" text))))
+
+(deftest llm-designators-pick-the-provider
+  (let ((b (make-llm-backend "openai:gpt-4o")))
+    (ok (typep b 'llm-protocol-openai:openai-compat-backend))
+    (ok (equal "https://api.openai.com/v1" (llm-protocol-openai:openai-base-url b)))
+    (ok (equal "gpt-4o" (llm-protocol-openai:openai-default-model b))))
+  (testing "the model is everything after the first colon"
+    (let ((b (make-llm-backend "ollama:llama3.1:8b")))
+      (ok (equal "http://127.0.0.1:11434/v1" (llm-protocol-openai:openai-base-url b)))
+      (ok (equal "llama3.1:8b" (llm-protocol-openai:openai-default-model b)))))
+  (testing "a provider alone takes its default model"
+    (let ((b (make-llm-backend "anthropic")))
+      (ok (typep b 'llm-protocol-anthropic:anthropic-backend))
+      (ok (equal "claude-opus-5-5" (llm-protocol-anthropic:anthropic-default-model b)))))
+  (ok (typep (make-llm-backend "mock") 'llm-protocol:llm-backend)))
+
+(deftest unknown-provider-signals-with-use-value
+  (ok (signals (make-llm-backend "nosuch:model") 'llm-protocol:llm-unknown-provider))
+  (let ((mock (make-mock-llm-backend)))
+    (ok (eq mock (handler-bind ((llm-protocol:llm-unknown-provider
+                                  (lambda (c) (use-value mock c))))
+                   (make-llm-backend "nosuch"))))))
