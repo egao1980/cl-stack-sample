@@ -66,16 +66,64 @@ Other agents (Cursor, Codex) read [`AGENTS.md`](AGENTS.md), which points to the 
 
 ## 4. Run the agent live
 
-With `ANTHROPIC_API_KEY` set:
-
 ```bash
+export ANTHROPIC_API_KEY=…                 # default provider
 cl-repo run -- ros run \
   -e '(asdf:load-system "cl-stack-sample/agent")' \
   -e '(print (cl-stack-sample/agent:ask "How long is 1h30m plus 45m plus 2d?"))' \
   -e '(uiop:quit)'
 ```
 
-`ask` uses Anthropic (`claude-opus-5-5`) over the cl-stack async HTTP backend. Retries follow the failure class, and the run stops after 6 steps. Pass `:backend` to use any other `llm-protocol` backend. To build a longer-running agent, with compaction, permissions, subagents and `AGENTS.md` discovery, see the [agent harness tutorial](https://github.com/egao1980/cl-stack/blob/main/docs/tutorials/agent-harness.md).
+`ask` runs over the cl-stack async HTTP backend. It retries by failure class and stops after 6 steps. For a longer-running agent, with compaction, permissions, subagents and `AGENTS.md` discovery, see the [agent harness tutorial](https://github.com/egao1980/cl-stack/blob/main/docs/tutorials/agent-harness.md).
+
+### Choose the model provider
+
+A provider is named by a designator: `"provider"` or `"provider:model"`. The model is everything after the first colon, so `"ollama:llama3.1:8b"` works. It is set by, in order of precedence:
+
+1. `(ask question :llm "openai:gpt-4o")`, or `(make-duration-agent :llm "…")`;
+2. `(setf cl-stack-sample/agent:*default-llm* "…")`;
+3. the `SAMPLE_LLM` environment variable;
+4. `"anthropic"`.
+
+| Provider | Designator | Endpoint | Credentials | Default model |
+|----------|------------|----------|-------------|---------------|
+| Anthropic | `anthropic[:model]` | `ANTHROPIC_BASE_URL`, else `api.anthropic.com` | `ANTHROPIC_API_KEY` | `claude-opus-5-5` |
+| OpenAI | `openai[:model]` | `api.openai.com/v1` | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| OpenRouter | `openrouter[:vendor/model]` | `openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | `openai/gpt-4o-mini` |
+| Any OpenAI-compatible server | `openai-compat[:model]` | `OPENAI_BASE_URL` | `OPENAI_API_KEY` | `OPENAI_MODEL` |
+| LM Studio | `lmstudio[:model]` | `127.0.0.1:1234/v1` | `LM_API_TOKEN` when its server auth is on | give the loaded model id (`lms ls`) |
+| Ollama | `ollama[:model]` | `127.0.0.1:11434/v1` | none | give one, e.g. `ollama:llama3.1:8b` |
+| vLLM | `vllm[:model]` | `127.0.0.1:8000/v1` | none | give the served model |
+| Offline echo | `mock` | none | none | none |
+
+```bash
+SAMPLE_LLM=openai:gpt-4o OPENAI_API_KEY=… cl-repo run -- ros run …
+SAMPLE_LLM=ollama:llama3.1:8b cl-repo run -- ros run …           # ollama serve; ollama pull llama3.1:8b
+SAMPLE_LLM=mock cl-repo run -- ros run …                          # no network: prints "echo: …"
+```
+
+Without a model, the OpenAI-compatible providers send `OPENAI_MODEL`, or `gpt-4o-mini` when that is unset, so name the model for local servers. The model must support tool calls. Small local models sometimes answer without calling `add_durations`.
+
+**Add a provider.** `*providers*` holds entries of the form `(name kind base-url api-key-env default-model)`. `kind` is `:anthropic` ([`llm-protocol-anthropic`](https://github.com/egao1980/llm-protocol-anthropic)), `:openai` ([`llm-protocol-openai`](https://github.com/egao1980/llm-protocol-openai), chat completions) or `:mock`. Push a new entry:
+
+```lisp
+(push '("groq" :openai "https://api.groq.com/openai/v1" "GROQ_API_KEY" "llama-3.3-70b-versatile")
+      cl-stack-sample/agent:*providers*)
+```
+
+**Use any backend object.** `:backend` takes any `llm-protocol` backend, such as llama.cpp in-process (`llm-backend-llama-cpp`) or one from a provider catalog (`stack-llm:resolve-backend`). It bypasses designators:
+
+```lisp
+(cl-stack-sample/agent:ask "…" :backend (stack-llm-anthropic:make-vllm-anthropic-backend))
+```
+
+**Unknown provider.** `make-llm-backend` signals `llm-protocol:llm-unknown-provider`, listing the known names. Its `use-value` restart takes a backend to use instead, so a caller can fall back without unwinding:
+
+```lisp
+(handler-bind ((stack-llm:llm-unknown-provider
+                 (lambda (c) (use-value (stack-llm:make-mock-llm-backend) c))))
+  (cl-stack-sample/agent:make-llm-backend "nosuch"))
+```
 
 ## Layout
 

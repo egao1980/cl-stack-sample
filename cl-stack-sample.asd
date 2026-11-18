@@ -30,6 +30,7 @@
                (:version "ai-agent-protocol" "0.6.0")
                (:version "llm-protocol" "0.4.0")
                (:version "llm-protocol-anthropic" "0.2.0")
+               (:version "llm-protocol-openai" "0.3.1")
                "json-protocol" "json-backend-jzon"
                "event-protocol" "event-backend-libuv"
                "http-backend-async")
