@@ -9,6 +9,7 @@
            #:*providers*
            #:*default-llm*
            #:make-llm-backend
+           #:make-provider-backend
            #:make-duration-tool
            #:make-duration-agent
            #:use-async-http
@@ -41,6 +42,23 @@ Studio's address); :MOCK is the offline echo backend. Push an entry to add one."
   "Provider designator used when none is given. NIL: $SAMPLE_LLM at the time
 the agent is made, else \"anthropic\".")
 
+(defgeneric make-provider-backend (kind &key base-url api-key model)
+  (:documentation "The llm-protocol backend for a *PROVIDERS* entry of KIND.
+Add a method (and push a *PROVIDERS* entry) for a new kind of provider, as
+the cl-stack-sample/vllm system does for :VLLM-CPP."))
+
+(defmethod make-provider-backend ((kind (eql :anthropic)) &key base-url api-key model)
+  (declare (ignore base-url api-key))
+  (llm-protocol-anthropic:make-anthropic-backend :default-model model))
+
+(defmethod make-provider-backend ((kind (eql :openai)) &key base-url api-key model)
+  (llm-protocol-openai:make-openai-compat-backend
+   :base-url base-url :api-key api-key :default-model model))
+
+(defmethod make-provider-backend ((kind (eql :mock)) &key base-url api-key model)
+  (declare (ignore base-url api-key model))
+  (make-mock-llm-backend))
+
 (defun make-llm-backend (designator)
   "An llm-protocol backend for DESIGNATOR, \"provider\" or \"provider:model\"
 (\"openai:gpt-4o\", \"ollama:llama3.1:8b\" — the model is everything after the
@@ -60,15 +78,10 @@ USE-VALUE restart that takes a backend to use instead."
                    :message (format nil "known providers: ~{~a~^, ~}"
                                     (mapcar #'first *providers*))))
           (destructuring-bind (kind base-url key-env default-model) (rest spec)
-            (let ((model (or model default-model))
-                  (api-key (and key-env (uiop:getenv key-env))))
-              (ecase kind
-                (:anthropic
-                 (llm-protocol-anthropic:make-anthropic-backend :default-model model))
-                (:openai
-                 (llm-protocol-openai:make-openai-compat-backend
-                  :base-url base-url :api-key api-key :default-model model))
-                (:mock (make-mock-llm-backend))))))
+            (make-provider-backend kind
+                                   :base-url base-url
+                                   :api-key (and key-env (uiop:getenv key-env))
+                                   :model (or model default-model))))
       (use-value (backend)
         :report "Use another llm-protocol backend."
         backend))))
