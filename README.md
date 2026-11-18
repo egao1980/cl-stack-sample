@@ -93,7 +93,8 @@ A provider is named by a designator: `"provider"` or `"provider:model"`. The mod
 | Any OpenAI-compatible server | `openai-compat[:model]` | `OPENAI_BASE_URL` | `OPENAI_API_KEY` | `OPENAI_MODEL` |
 | LM Studio | `lmstudio[:model]` | `127.0.0.1:1234/v1` | `LM_API_TOKEN` when its server auth is on | give the loaded model id (`lms ls`) |
 | Ollama | `ollama[:model]` | `127.0.0.1:11434/v1` | none | give one, e.g. `ollama:llama3.1:8b` |
-| vLLM | `vllm[:model]` | `127.0.0.1:8000/v1` | none | give the served model |
+| vLLM server | `vllm[:model]` | `127.0.0.1:8000/v1` | none | give the served model |
+| vllm.cpp in-process | `vllm-cpp:<path.gguf>` | none: the engine runs in this Lisp | none | `VLLM_MODEL_PATH`; load `cl-stack-sample/vllm` |
 | Offline echo | `mock` | none | none | none |
 
 ```bash
@@ -113,6 +114,23 @@ Without a model, the OpenAI-compatible providers send `OPENAI_MODEL`, or `gpt-4o
       cl-stack-sample/agent:*providers*)
 ```
 
+**vLLM in-process (vllm.cpp).** The `cl-stack-sample/vllm` system adds the `vllm-cpp` provider. It loads a GGUF into [vllm.cpp](https://github.com/egao1980/vllm-cpp) inside the Lisp image: Metal on darwin/arm64, CUDA on linux/amd64. No server is involved:
+
+```bash
+SAMPLE_LLM=vllm-cpp:$HOME/.lmstudio/models/lmstudio-community/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q4_K_M.gguf \
+cl-repo run -- ros run \
+  -e '(asdf:load-system "cl-stack-sample/vllm")' \
+  -e '(print (cl-stack-sample/agent:ask "How long is 1h30m plus 45m plus 2d?"))' -e '(uiop:quit)'
+;; → "The sum is 2d2h15m."   (add_durations ["1h30m","45m","2d"] → 2d2h15m)
+```
+
+- **Context length.** The engine loads with `*vllm-max-model-len*` set to 2048. vllm.cpp's default KV pool holds about 4064 tokens, so a larger value is refused at load.
+- **Model support.** vllm-cpp 0.2.2's darwin overlay loads Qwen3.5-family GGUFs (`qwen35`, `qwen35moe`, `qwen3next`) and `deepseek4`.
+- **Small models.** A 2B model handles a plain question, but may answer without calling the tool when the request is odd. A larger model follows the tool-error retry more reliably.
+- **Install size.** `cl-repo sync` installs every system's dependencies, including the vllm-cpp native overlay. On linux/amd64 that is the CUDA build; without the NVIDIA driver it loads as unavailable.
+
+**Add a provider kind.** `make-provider-backend` is a generic function on the kind keyword. `cl-stack-sample/vllm` does exactly this: one `defmethod` on `(eql :vllm-cpp)` and one `*providers*` entry.
+
 **Use any backend object.** `:backend` takes any `llm-protocol` backend, such as llama.cpp in-process (`llm-backend-llama-cpp`) or one from a provider catalog (`stack-llm:resolve-backend`). It bypasses designators:
 
 ```lisp
@@ -130,9 +148,10 @@ Without a model, the OpenAI-compatible providers send `OPENAI_MODEL`, or `gpt-4o
 ## Layout
 
 ```text
-cl-stack-sample.asd      4 systems: library, tests, agent, agent tests
+cl-stack-sample.asd      5 systems: library, tests, agent, agent tests, vllm
 src/                     package, conditions, duration
 agent/agent.lisp         the add_durations tool and the agent
+vllm/vllm.lisp           the in-process vllm.cpp provider (vllm-cpp:<gguf>)
 tests/                   Rove: duration-test, agent-test
 .claude/settings.json    cl-stack marketplace + lisp-workspace plugin
 AGENTS.md / CLAUDE.md    project notes for agents

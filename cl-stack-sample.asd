@@ -50,3 +50,12 @@
   :perform (test-op (o c)
              (unless (symbol-call :rove :run c)
                (error "tests failed for ~A" (component-name c)))))
+
+(defsystem "cl-stack-sample/vllm"
+  :version "0.1.0"
+  :description "In-process vllm.cpp provider (\"vllm-cpp:<gguf>\") for the duration agent"
+  :depends-on ("cl-stack-sample/agent"
+               (:version "llm-backend-vllm-cpp" "0.3.2")
+               (:version "vllm-cpp" "0.2.2"))
+  :pathname "vllm"
+  :components ((:file "vllm")))
