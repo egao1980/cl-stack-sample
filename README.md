@@ -151,17 +151,22 @@ A recorded run is in [`docs/harness-session.md`](docs/harness-session.md). The m
 ### Plan mode
 
 ```bash
-cl-stack-code --model openai --permission-mode plan \
+cl-stack-code --model openai --permission-mode plan --lisp-image off \
   -p "Add a w (week) unit to parse-duration, with tests. Run them." --apply
 ```
 
-In plan mode, edits and shell commands run in a copy of the project: a git worktree, under an OS sandbox with the network off. The run prints the projected diff. `--apply` writes it to the project when the run ends. Without `--apply`, review the diff, then apply it later with `cl-stack-code --resume ID --apply`, or discard it with `--reject`.
+In plan mode, edits and shell commands run in a copy of the project. The copy is a git worktree of `HEAD`, so commit first. Commands run under an OS sandbox (Seatbelt on macOS, Landlock on Linux) with the network off.
+
+- **Sandboxed tests.** `cl-repo test` works in the sandbox once the dependencies are installed: run `cl-repo sync` (or section 2) first, because the network is off.
+- **The diff.** The run prints the projected diff. `--apply` writes it to the project when the run ends.
+- **Later.** Without `--apply`, review the diff, then apply it with `cl-stack-code -p --resume ID --apply` or discard it with `--reject`. The run prints the session id. This also rescues a run that stopped early, for example when the model server dropped the connection.
+- **No Lisp image.** `--lisp-image off` is needed because the project settings turn the Lisp image on, and plan mode refuses it in 0.10.1 ("the image would not see the plan area"). So a plan run gets the plain `edit` tools, not lisp-mcp's structural ones.
+- **Requirements.** Plan mode needs git 2.56 or later on `PATH`.
 
 ### Known limits (cl-stack-code 0.10.1)
 
-PLAN_MODE_NOTE
-
 - **Slow models.** On a slow local model, a single model call over about 300 s ends the run with "sync await timed out" ([cl-stack-code#19](https://github.com/egao1980/cl-stack-code/issues/19)). Use `--max-turns` to bound a run.
+- **Transport errors.** A dropped connection from the model server ("incomplete HTTP response") ends the run (exit 1). Edits made so far stay, and a plan stays open for `--resume`.
 - **What the harness reads.** cl-stack-code reads `AGENTS.md` (and `CLAUDE.md`). It does not read skills, path-scoped rules or `@` imports yet. The lisp-workspace skills that `AGENTS.md` links to are for Claude Code and other agents.
 - **Editors.** Zed, Emacs and VS Code integration over the Agent Client Protocol (`cl-stack-code --acp`) comes with cl-stack-code 0.11.0.
 
