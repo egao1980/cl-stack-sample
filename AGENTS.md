@@ -10,5 +10,5 @@ A small Common Lisp library (`cl-stack-sample`: durations like `1h30m`) and an a
 - **Layout:** `src/` is the library, `agent/` is the agent, and `tests/` holds one Rove file per system.
 - **Errors:** `invalid-duration` (under `duration-error`) with a `use-value` restart. `parse-durations` shows the policy side: a `handler-bind` that invokes the restart. Keep new errors in that tree, with restarts at the lowest site that can recover.
 - **Agent tools:** a tool turns library errors into `tool-input-error`, so the model is told to fix its arguments.
-- **Edits:** change `.lisp` and `.asd` files through lisp-mcp `edit-*` tools.
+- **Edits:** prefer structural Lisp edit tools when you have them (lisp-mcp `edit-*`: from the Claude Code plugin, or cl-stack-code's Lisp image, which `.cl-stack-code/settings.json` turns on). They refuse unbalanced writes. Otherwise use your file edit tool and keep the parentheses balanced; `cl-repo test` catches a reader error.
 - **Branches:** name feature branches `agent/<topic>-<4 hex>`.
