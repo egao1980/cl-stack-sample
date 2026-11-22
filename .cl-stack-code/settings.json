@@ -1,0 +1,60 @@
+{
+  "permissions": {
+    "allow": [
+      "read(**)",
+      "glob(**)",
+      "grep(**)",
+      "ls(**)",
+      "edit(src/**)",
+      "edit(tests/**)",
+      "edit(agent/**)",
+      "multi_edit(src/**)",
+      "multi_edit(tests/**)",
+      "multi_edit(agent/**)",
+      "write(src/**)",
+      "write(tests/**)",
+      "write(agent/**)",
+      "bash(cl-repo test)",
+      "bash(cl-repo test *)",
+      "bash(program:cl-repo)",
+      "bash(git status *)",
+      "bash(git diff *)",
+      "bash(git log *)",
+      "bash(program:git)",
+      "bash(ls *)",
+      "bash(program:ls)",
+      "bash(cat *)",
+      "bash(program:cat)",
+      "bash(head *)",
+      "bash(program:head)",
+      "bash(tail *)",
+      "bash(program:tail)",
+      "bash(grep *)",
+      "bash(program:grep)",
+      "bash(wc *)",
+      "bash(program:wc)",
+      "bash(sed -n *)",
+      "bash(program:sed)",
+      "bash(cd:.)",
+      "bash(cd:src)",
+      "bash(cd:tests)",
+      "source-*",
+      "edit-*(path:src/**)",
+      "edit-*(path:tests/**)",
+      "repl-load-system(system:cl-stack-sample*)",
+      "repl-run-tests(system:cl-stack-sample*)",
+      "repl-compile"
+    ],
+    "deny": [
+      "*(path:.env)",
+      "*(path:.env.*)",
+      "bash(read:.env)",
+      "bash(read:.env.*)",
+      "bash(git push *)",
+      "bash(cl-repo publish *)"
+    ]
+  },
+  "lispImage": {
+    "image": "spawn"
+  }
+}

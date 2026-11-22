@@ -1,12 +1,13 @@
 # cl-stack-sample
 
-A sample Common Lisp project on [cl-stack](https://github.com/egao1980/cl-stack). It shows three things working together:
+A sample Common Lisp project on [cl-stack](https://github.com/egao1980/cl-stack). It shows four things working together:
 
 | | What | Where |
 |---|---|---|
 | **cl-repo** | dependencies from OCI (GHCR), tests in a fresh image, CI with the canned workflow; no Quicklisp | `cl-stack-sample.asd`, `.github/workflows/test.yml` |
 | **lisp-mcp** | the agent reads, edits (never unbalanced), compiles and debugs Lisp through MCP | from the `lisp-workspace` plugin |
 | **Agentic configuration** | cl-stack conventions, Common Lisp skills and the MCP server as a Claude Code plugin | `.claude/settings.json`, `AGENTS.md` |
+| **cl-stack-code** | the cl-stack coding agent CLI works on the project: headless `-p`, plan mode, permission rules | `.cl-stack-code/settings.json`, section 4 |
 
 The code is deliberately small:
 
@@ -64,7 +65,112 @@ The agent should:
 
 Other agents (Cursor, Codex) read [`AGENTS.md`](AGENTS.md), which points to the same conventions and skills.
 
-## 4. Run the agent live
+## 4. Work on it with the cl-stack harness
+
+[`cl-stack-code`](https://github.com/egao1980/cl-stack-code) is a coding agent written on cl-stack. It runs in the terminal, interactively or headless with `-p`, and works with any Anthropic or OpenAI-compatible model.
+
+### Get the launcher
+
+The launcher, `cl-stack-code.sh`, installs the published cl-stack-code from GHCR and runs it as a fast-start executable. It needs the toolchain from section 1. Get it in one of these ways:
+
+- **Direct download** (the simplest):
+
+  ```bash
+  mkdir -p ~/.local/bin
+  curl -fsSL https://raw.githubusercontent.com/egao1980/lisp-workspace/main/scripts/cl-stack-code.sh \
+    -o ~/.local/bin/cl-stack-code && chmod +x ~/.local/bin/cl-stack-code
+  ```
+
+- **The `lisp-workspace` plugin** (section 3): the launcher is at `~/.claude/plugins/marketplaces/cl-stack/scripts/cl-stack-code.sh`.
+- **The `lisp-workspace` submodule** (cl-workspace): `.lisp-workspace/scripts/cl-stack-code.sh`.
+
+Build the executable once. It takes about two minutes, and later starts take well under a second:
+
+```bash
+cl-stack-code --which      # → ~/.cache/cl-stack-code/cl-stack-code-0.10.1-sbcl-bin-<version>
+cl-stack-code --help
+```
+
+The launcher pins the cl-stack-code version. A new pin or a new SBCL builds a new executable. More in the [lisp-workspace README](https://github.com/egao1980/lisp-workspace#cl-stack-code-harness).
+
+### Configure a model
+
+`--model provider` or `--model provider:model`. The default is `anthropic`. Credentials come from the environment, never from the project's settings:
+
+```bash
+# Anthropic
+export ANTHROPIC_API_KEY=…                  # optional: ANTHROPIC_MODEL, ANTHROPIC_BASE_URL
+
+# any OpenAI-compatible server: OpenAI, LM Studio, llama.cpp, vLLM, Unsloth Studio, …
+export OPENAI_BASE_URL=http://localhost:1234/v1 OPENAI_API_KEY=… OPENAI_MODEL=<model id>
+cl-stack-code --model openai …
+```
+
+If the model id has a colon in it (`org/model:quant`), set `OPENAI_MODEL` and pass `--model openai`, because `provider:model` splits at the first colon. The model must support tool calls.
+
+### Project settings: `.cl-stack-code/settings.json`
+
+The project's [`.cl-stack-code/settings.json`](.cl-stack-code/settings.json) does two things.
+
+**Turns on the Lisp image** (`"lispImage": {"image": "spawn"}`). cl-stack-code starts a Swank image next to the session. It also offers [lisp-mcp](https://github.com/egao1980/lisp-mcp)'s tools alongside its file and shell tools:
+
+- `source-read` and `source-outline`, which read code without evaluating it;
+- `edit-replace` and the other structural edits, which address a form (`defun parse-duration`) and refuse a write that would unbalance the file;
+- the `repl-*` and `debug-*` tools.
+
+**Allows these without asking:**
+
+- reading anywhere in the project;
+- editing `src/`, `tests/` and `agent/`, with the file tools or the `edit-*` tools;
+- `cl-repo test`, plus `repl-load-system` and `repl-run-tests` for this project's systems;
+- a few read-only shell commands: `git status`, `git diff`, `git log`, `ls`, `cat`, `head`, `tail`, `grep`, `wc` and `sed -n`.
+
+It denies `.env`, `git push` and `cl-repo publish`. Anything else asks in the terminal. A headless run can't ask, so it refuses those calls and tells the model which flag would allow them.
+
+A shell call is allowed only when every part of it is allowed. Each simple command has two parts, `bash:<words>` and `program:<argv0>`, so `cl-repo test` needs two rules: `bash(cl-repo test *)` and `bash(program:cl-repo)`. Put personal rules in `.cl-stack-code/settings.local.json` (gitignored) or `~/.config/cl-stack-code/settings.json`. Keys never go in settings: they come from the environment.
+
+### Interactive
+
+```bash
+cl-stack-code --model openai
+```
+
+This opens a terminal session. You get a streamed transcript, `@` file mentions, approval dialogs for anything the rules don't allow, `/ps` for background jobs, and `-c` / `-r ID` to continue a session later.
+
+### Headless: add a week unit
+
+```bash
+cl-stack-code --model openai --permission-mode acceptEdits \
+  -p "Add a w (week) unit to parse-duration, with tests. Run them."
+```
+
+`acceptEdits` allows file edits. The settings file allows `cl-repo test`. Without that file, add the rules on the command line: `--allowed-tools 'bash(cl-repo test *) bash(program:cl-repo)'`. Add `--output-format stream-json` to see each tool call as a JSON line.
+
+A recorded run is in [`docs/harness-session.md`](docs/harness-session.md). The model read the code with `source-read`. It added `(#\w . 604800)` to `*units*` and new test cases with `edit-replace`, which refused one unbalanced edit. Then `cl-repo test` passed on the first run. It took 20 model calls, about 14 minutes on a slow, shared local server. The [cl-stack-demos `harness/sample`](https://github.com/egao1980/cl-stack-demos/tree/main/harness/sample) demo repeats the session from a fresh clone.
+
+### Plan mode
+
+```bash
+cl-stack-code --model openai --permission-mode plan --lisp-image off \
+  -p "Add a w (week) unit to parse-duration, with tests. Run them." --apply
+```
+
+In plan mode, edits and shell commands run in a copy of the project. The copy is a git worktree of `HEAD`, so commit first. Commands run under an OS sandbox (Seatbelt on macOS, Landlock on Linux) with the network off.
+
+- **Sandboxed tests.** `cl-repo test` works in the sandbox once the dependencies are installed: run `cl-repo sync` (or section 2) first, because the network is off.
+- **The diff.** The run prints the projected diff. `--apply` writes it to the project when the run ends.
+- **Later.** Without `--apply`, review the diff, then apply it with `cl-stack-code -p --resume ID --apply` or discard it with `--reject`. The run prints the session id. This also rescues a run that stopped early, for example when the model server dropped the connection.
+- **No Lisp image.** `--lisp-image off` is needed because the project settings turn the Lisp image on, and plan mode refuses it in 0.10.1 ("the image would not see the plan area"). So a plan run gets the plain `edit` tools, not lisp-mcp's structural ones.
+- **Requirements.** Plan mode needs git 2.56 or later on `PATH`.
+
+### Known limits (cl-stack-code 0.10.1)
+
+- **Slow models.** On a slow local model, a single model call over about 300 s ends the run with "sync await timed out" ([cl-stack-code#19](https://github.com/egao1980/cl-stack-code/issues/19)). Use `--max-turns` to bound a run.
+- **Transport errors.** A dropped connection from the model server ("incomplete HTTP response") ends the run (exit 1). Edits made so far stay, and a plan stays open for `--resume`.
+- **What the harness reads.** cl-stack-code reads `AGENTS.md` (and `CLAUDE.md`). It does not read skills, path-scoped rules or `@` imports yet. The lisp-workspace skills that `AGENTS.md` links to are for Claude Code and other agents.
+- **Editors.** Zed, Emacs and VS Code integration over the Agent Client Protocol (`cl-stack-code --acp`) comes with cl-stack-code 0.11.0.
+
+## 5. Run the agent live
 
 ```bash
 export ANTHROPIC_API_KEY=…                 # default provider
@@ -156,6 +262,8 @@ agent/agent.lisp         the add_durations tool and the agent
 vllm/vllm.lisp           the in-process vllm.cpp provider (vllm-cpp:<gguf>)
 tests/                   Rove: duration-test, agent-test
 .claude/settings.json    cl-stack marketplace + lisp-workspace plugin
+.cl-stack-code/          cl-stack-code project settings (permission rules)
+docs/harness-session.md  a recorded cl-stack-code -p session
 AGENTS.md / CLAUDE.md    project notes for agents
 .github/workflows/       cl-repository test-system.yml, library + agent
 ```
