@@ -7,7 +7,7 @@ A sample Common Lisp project on [cl-stack](https://github.com/egao1980/cl-stack)
 | **cl-repo** | dependencies from OCI (GHCR), tests in a fresh image, CI with the canned workflow; no Quicklisp | `cl-stack-sample.asd`, `.github/workflows/test.yml` |
 | **lisp-mcp** | the agent reads, edits (never unbalanced), compiles and debugs Lisp through MCP | from the `lisp-workspace` plugin |
 | **Agentic configuration** | cl-stack conventions, Common Lisp skills and the MCP server as a Claude Code plugin | `.claude/settings.json`, `AGENTS.md` |
-| **cl-stack-code** | the cl-stack coding agent CLI works on the project: headless `-p`, plan mode, permission rules | `.cl-stack-code/settings.json`, section 4 |
+| **cl-stack-code** | the cl-stack coding agent CLI works on the project: interactive and headless `-p`, permission rules, lisp-mcp structural edits | `.cl-stack-code/settings.json`, section 4 |
 
 The code is deliberately small:
 
@@ -148,27 +148,14 @@ cl-stack-code --model openai --permission-mode acceptEdits \
 
 A recorded run is in [`docs/harness-session.md`](docs/harness-session.md). The model read the code with `source-read`. It added `(#\w . 604800)` to `*units*` and new test cases with `edit-replace`, which refused one unbalanced edit. Then `cl-repo test` passed on the first run. It took 20 model calls, about 14 minutes on a slow, shared local server. The [cl-stack-demos `harness/sample`](https://github.com/egao1980/cl-stack-demos/tree/main/harness/sample) demo repeats the session from a fresh clone.
 
-### Plan mode
-
-```bash
-cl-stack-code --model openai --permission-mode plan --lisp-image off \
-  -p "Add a w (week) unit to parse-duration, with tests. Run them." --apply
-```
-
-In plan mode, edits and shell commands run in a copy of the project. The copy is a git worktree of `HEAD`, so commit first. Commands run under an OS sandbox (Seatbelt on macOS, Landlock on Linux) with the network off.
-
-- **Sandboxed tests.** `cl-repo test` works in the sandbox once the dependencies are installed: run `cl-repo sync` (or section 2) first, because the network is off.
-- **The diff.** The run prints the projected diff. `--apply` writes it to the project when the run ends.
-- **Later.** Without `--apply`, review the diff, then apply it with `cl-stack-code -p --resume ID --apply` or discard it with `--reject`. The run prints the session id. This also rescues a run that stopped early, for example when the model server dropped the connection.
-- **No Lisp image.** `--lisp-image off` is needed because the project settings turn the Lisp image on, and plan mode refuses it in 0.10.1 ("the image would not see the plan area"). So a plan run gets the plain `edit` tools, not lisp-mcp's structural ones.
-- **Requirements.** Plan mode needs git 2.56 or later on `PATH`.
 
 ### Known limits (cl-stack-code 0.10.1)
 
 - **Slow models.** On a slow local model, a single model call over about 300 s ends the run with "sync await timed out" ([cl-stack-code#19](https://github.com/egao1980/cl-stack-code/issues/19)). Use `--max-turns` to bound a run.
-- **Transport errors.** A dropped connection from the model server ("incomplete HTTP response") ends the run (exit 1). Edits made so far stay, and a plan stays open for `--resume`.
+- **Transport errors.** A dropped connection from the model server ("incomplete HTTP response") ends the run (exit 1). Edits made so far stay; continue the session with `-c` or `--resume ID`.
 - **What the harness reads.** cl-stack-code reads `AGENTS.md` (and `CLAUDE.md`). It does not read skills, path-scoped rules or `@` imports yet. The lisp-workspace skills that `AGENTS.md` links to are for Claude Code and other agents.
 - **Editors.** Zed, Emacs and VS Code integration over the Agent Client Protocol (`cl-stack-code --acp`) comes with cl-stack-code 0.11.0.
+- **Plan mode.** Plan mode (explore, then propose a plan for you to approve) is coming.
 
 ## 5. Run the agent live
 
