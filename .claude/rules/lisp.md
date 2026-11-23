@@ -14,3 +14,6 @@ paths:
   (the agent's tools turn library errors into `tool-input-error`).
 - No `ignore-errors` and no catch-all `(error (c) …)` in library code.
 - A new error gets a test that checks its type and its slots.
+- Edit `.lisp` files with the structural edit tools (`edit-replace`,
+  `edit-insert`, `edit-delete`): they keep the forms balanced and re-indent
+  them. `source-read` gives the form and its hash first.
