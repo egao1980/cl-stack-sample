@@ -21,7 +21,7 @@
           (when (minusp n) (fail "negative amount"))
           (setf pos next)
           (when (>= pos end) (fail "missing unit (d, h, m or s)"))
-          (let ((unit (assoc (char-downcase (char text pos)) *units*)))
+          (let ((unit (assoc (char text pos) *units*)))
             (unless unit (fail (format nil "unknown unit ~s" (char text pos))))
             (incf total (* n (cdr unit)))
             (incf pos)
