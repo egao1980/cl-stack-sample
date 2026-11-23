@@ -87,7 +87,7 @@ The launcher, `cl-stack-code.sh`, installs the published cl-stack-code from GHCR
 Build the executable once. It takes about two minutes, and later starts take well under a second:
 
 ```bash
-cl-stack-code --which      # → ~/.cache/cl-stack-code/cl-stack-code-0.12.1-sbcl-bin-<version>
+cl-stack-code --which      # → ~/.cache/cl-stack-code/cl-stack-code-0.12.3-sbcl-bin-<version>
 cl-stack-code --help
 ```
 
@@ -163,7 +163,7 @@ The `system`/`init` event (`--output-format stream-json`) lists what was found: 
 
 [Zed](https://zed.dev) runs cl-stack-code over the Agent Client Protocol (`cl-stack-code --acp`). Files are read and written through Zed's buffers, `cl-repo test` runs in Zed's terminal, and anything the project settings don't allow is a Zed permission prompt.
 
-1. **Build and sync once.** `cl-stack-code --build`, so Zed gets the `initialize` reply in about a second. Then `cl-repo sync` in this checkout, so the session's Lisp image starts without installing anything.
+1. **Build and sync once** (the launcher pins cl-stack-code 0.12.3). `cl-stack-code --build`, so Zed gets the `initialize` reply in about a second. Then `cl-repo sync` in this checkout, so the session's Lisp image starts without installing anything.
 2. **Add the agent** to `~/.config/zed/settings.json`. The entry and its fields are in [lisp-workspace `editors/zed/`](https://github.com/egao1980/lisp-workspace/tree/main/editors/zed):
 
    ```json
@@ -191,14 +191,13 @@ The `system`/`init` event (`--output-format stream-json`) lists what was found: 
    zed .
    ```
 
-4. In the Agent panel, start a new **cl-stack-code** thread and type a prompt, for example "the tests fail, find and fix the bug" or "Add a w (week) unit to parse-duration, with tests. Run them."
+4. In the Agent panel, start a new **cl-stack-code** thread. Its first card, "Context: AGENTS.md · skills: duration-units · rules: 1", lists what the session found; "Rule loaded: .claude/rules/lisp.md" appears when the agent first reads a `.lisp` file. Type a prompt, for example "the tests fail, find and fix the bug" or "Add a w (week) unit to parse-duration, with tests. Run them."
 
-A recorded session (a seeded bug on the `demo/zed-bug` branch, fixed in Zed) is in [cl-stack-demos `harness/zed-sample`](https://github.com/egao1980/cl-stack-demos/tree/main/harness/zed-sample).
+The Zed demo (a seeded bug on the `demo/zed-seeded-bug` branch, fixed by cl-stack-code over ACP) is in [cl-stack-demos `harness/zed-sample`](https://github.com/egao1980/cl-stack-demos/tree/main/harness/zed-sample).
 
-### Known limits (cl-stack-code 0.12.1)
+### Known limits (cl-stack-code 0.12.3)
 
 - **Slow models.** A slow local model needs longer timeouts: `OPENAI_TIMEOUT` (seconds, for a call that is not streamed) and `OPENAI_STREAM_IDLE_TIMEOUT` (the longest silence inside a stream). Use `--max-turns` to bound a run.
-- **Streaming.** Text reaches the terminal or the editor at the end of each model call, not token by token, until [http-backend-async#70](https://github.com/egao1980/http-backend-async/issues/70) ships.
 - **Transport errors.** A dropped connection from the model server ("incomplete HTTP response") ends the run (exit 1). Edits made so far stay; continue the session with `-c` or `--resume ID`.
 - **Plan mode.** Plan mode (explore, then propose a plan for you to approve) is coming.
 
