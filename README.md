@@ -87,7 +87,7 @@ The launcher, `cl-stack-code.sh`, installs the published cl-stack-code from GHCR
 Build the executable once. It takes about two minutes, and later starts take well under a second:
 
 ```bash
-cl-stack-code --which      # → ~/.cache/cl-stack-code/cl-stack-code-0.10.1-sbcl-bin-<version>
+cl-stack-code --which      # → ~/.cache/cl-stack-code/cl-stack-code-0.12.1-sbcl-bin-<version>
 cl-stack-code --help
 ```
 
@@ -149,12 +149,57 @@ cl-stack-code --model openai --permission-mode acceptEdits \
 A recorded run is in [`docs/harness-session.md`](docs/harness-session.md). The model read the code with `source-read`. It added `(#\w . 604800)` to `*units*` and new test cases with `edit-replace`, which refused one unbalanced edit. Then `cl-repo test` passed on the first run. It took 20 model calls, about 14 minutes on a slow, shared local server. The [cl-stack-demos `harness/sample`](https://github.com/egao1980/cl-stack-demos/tree/main/harness/sample) demo repeats the session from a fresh clone.
 
 
-### Known limits (cl-stack-code 0.10.1)
+### Skills and rules
 
-- **Slow models.** On a slow local model, a single model call over about 300 s ends the run with "sync await timed out" ([cl-stack-code#19](https://github.com/egao1980/cl-stack-code/issues/19)). Use `--max-turns` to bound a run.
+cl-stack-code (0.12.0 and later) reads the same agent configuration as Claude Code:
+
+- **`AGENTS.md`**, and `CLAUDE.md`, which imports it with `@AGENTS.md`.
+- **Skills** in `.claude/skills/<name>/SKILL.md` (also `.cl-stack-code/skills/`). Their descriptions are in the system prompt; the model loads one with the `skill` tool. This project has [`duration-units`](.claude/skills/duration-units/SKILL.md): how `*units*` works, how to add a unit with a test, and how to fix one.
+- **Path-scoped rules** in `.claude/rules/*.md` (also `.cl-stack-code/rules/`). [`lisp.md`](.claude/rules/lisp.md) has `paths: ["**/*.lisp"]`, so it loads the first time a tool reads a `.lisp` file: this project's conditions-and-restarts convention.
+
+The `system`/`init` event (`--output-format stream-json`) lists what was found: `instructions`, `imports`, `skills` and `rules`.
+
+### Use it in Zed
+
+[Zed](https://zed.dev) runs cl-stack-code over the Agent Client Protocol (`cl-stack-code --acp`). Files are read and written through Zed's buffers, `cl-repo test` runs in Zed's terminal, and anything the project settings don't allow is a Zed permission prompt.
+
+1. **Build and sync once.** `cl-stack-code --build`, so Zed gets the `initialize` reply in about a second. Then `cl-repo sync` in this checkout, so the session's Lisp image starts without installing anything.
+2. **Add the agent** to `~/.config/zed/settings.json`. The entry and its fields are in [lisp-workspace `editors/zed/`](https://github.com/egao1980/lisp-workspace/tree/main/editors/zed):
+
+   ```json
+   "agent_servers": {
+     "cl-stack-code": {
+       "type": "custom",
+       "command": "/Users/you/.local/bin/cl-stack-code",
+       "args": ["--acp", "--model", "openai"],
+       "env": {
+         "OPENAI_BASE_URL": "http://localhost:8888/v1",
+         "OPENAI_MODEL": "<model id>",
+         "OPENAI_TIMEOUT": "600",
+         "OPENAI_STREAM_IDLE_TIMEOUT": "300",
+         "PATH": "/Users/you/.local/bin:/Users/you/.roswell/bin:/opt/homebrew/bin:/usr/bin:/bin"
+       }
+     }
+   }
+   ```
+
+   `PATH` must contain `cl-repo` and `ros`: the Lisp image (`lispImage: spawn`) starts through `cl-repo run`.
+3. **Start Zed with the key in its environment**, never in the settings file. Quit Zed first, then:
+
+   ```bash
+   export OPENAI_API_KEY=…
+   zed .
+   ```
+
+4. In the Agent panel, start a new **cl-stack-code** thread and type a prompt, for example "the tests fail, find and fix the bug" or "Add a w (week) unit to parse-duration, with tests. Run them."
+
+A recorded session (a seeded bug on the `demo/zed-bug` branch, fixed in Zed) is in [cl-stack-demos `harness/zed-sample`](https://github.com/egao1980/cl-stack-demos/tree/main/harness/zed-sample).
+
+### Known limits (cl-stack-code 0.12.1)
+
+- **Slow models.** A slow local model needs longer timeouts: `OPENAI_TIMEOUT` (seconds, for a call that is not streamed) and `OPENAI_STREAM_IDLE_TIMEOUT` (the longest silence inside a stream). Use `--max-turns` to bound a run.
+- **Streaming.** Text reaches the terminal or the editor at the end of each model call, not token by token, until [http-backend-async#70](https://github.com/egao1980/http-backend-async/issues/70) ships.
 - **Transport errors.** A dropped connection from the model server ("incomplete HTTP response") ends the run (exit 1). Edits made so far stay; continue the session with `-c` or `--resume ID`.
-- **What the harness reads.** cl-stack-code reads `AGENTS.md` (and `CLAUDE.md`). It does not read skills, path-scoped rules or `@` imports yet. The lisp-workspace skills that `AGENTS.md` links to are for Claude Code and other agents.
-- **Editors.** Zed, Emacs and VS Code integration over the Agent Client Protocol (`cl-stack-code --acp`) comes with cl-stack-code 0.11.0.
 - **Plan mode.** Plan mode (explore, then propose a plan for you to approve) is coming.
 
 ## 5. Run the agent live
