@@ -41,6 +41,7 @@
       "source-*",
       "edit-*(path:src/**)",
       "edit-*(path:tests/**)",
+      "edit-*(path:agent/**)",
       "repl-load-system(system:cl-stack-sample*)",
       "repl-run-tests(system:cl-stack-sample*)",
       "repl-compile"

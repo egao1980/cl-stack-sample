@@ -31,7 +31,7 @@ cl-repo test                                  # library: Rove, fresh SBCL image
 cl-repo test --system cl-stack-sample/agent   # agent: mock LLM, offline
 ```
 
-`cl-repo sync`, which `test`, `run` and `ros` call first, installs the `:depends-on` of every system in the `.asd` (library, tests, agent) from `ghcr.io/egao1980/cl-systems`. This needs cl-repo client 0.27.17 or later (0.27.20 for `cl-repo ros`). Nothing goes in `CL_SOURCE_REGISTRY`, and there is no `ql:quickload`. CI runs the same two commands through [`test-system.yml`](https://github.com/egao1980/cl-repository/blob/main/.github/workflows/test-system.yml).
+`cl-repo sync`, which `test`, `run` and `ros` call first, installs the `:depends-on` of every system in the `.asd` (library, tests, agent) from `ghcr.io/egao1980/cl-systems`. This needs cl-repo client 0.27.17 or later (0.27.20 for `cl-repo ros`); the sample is tested with 0.27.39. Nothing goes in `CL_SOURCE_REGISTRY`, and there is no `ql:quickload`. CI runs the same two commands through [`test-system.yml`](https://github.com/egao1980/cl-repository/blob/main/.github/workflows/test-system.yml).
 
 ## 3. Work on it with Claude Code
 
@@ -50,7 +50,7 @@ The plugin brings:
 
 - **Conventions** as session context: cl-repo only, Rove, conditions and restarts, own stack first.
 - **Skills** such as `lisp-workspace:asdf`, `lisp-workspace:cl-unit-testing`, `lisp-workspace:cl-stack-conditions` and `lisp-workspace:lisp-mcp-tooling`.
-- **The `lisp-mcp` server**, rooted at this project. On first use it builds a fast-start executable in `~/.cache/lisp-mcp/`; run `/mcp` to reconnect once it's ready.
+- **The `lisp-mcp` server** (0.7.3, as two MCP servers: `lisp-code` for reading and structural edits, `lisp-image` for live images), rooted at this project. On first use it builds a fast-start executable in `~/.cache/lisp-mcp/`; run `/mcp` to reconnect once it's ready.
 
 Try:
 
@@ -87,11 +87,11 @@ The launcher, `cl-stack-code.sh`, installs the published cl-stack-code from GHCR
 Build the executable once. It takes about two minutes, and later starts take well under a second:
 
 ```bash
-cl-stack-code --which      # → ~/.cache/cl-stack-code/cl-stack-code-0.12.3-sbcl-bin-<version>
+cl-stack-code --which      # → ~/.cache/cl-stack-code/cl-stack-code-0.14.0-sbcl-bin-<version>
 cl-stack-code --help
 ```
 
-The launcher pins the cl-stack-code version. A new pin or a new SBCL builds a new executable. More in the [lisp-workspace README](https://github.com/egao1980/lisp-workspace#cl-stack-code-harness).
+The launcher pins the cl-stack-code version (0.14.0). A new pin or a new SBCL builds a new executable. More in the [lisp-workspace README](https://github.com/egao1980/lisp-workspace#cl-stack-code-harness).
 
 ### Configure a model
 
@@ -163,7 +163,7 @@ The `system`/`init` event (`--output-format stream-json`) lists what was found: 
 
 [Zed](https://zed.dev) runs cl-stack-code over the Agent Client Protocol (`cl-stack-code --acp`). Files are read and written through Zed's buffers, `cl-repo test` runs in Zed's terminal, and anything the project settings don't allow is a Zed permission prompt.
 
-1. **Build and sync once** (the launcher pins cl-stack-code 0.12.3). `cl-stack-code --build`, so Zed gets the `initialize` reply in about a second. Then `cl-repo sync` in this checkout, so the session's Lisp image starts without installing anything.
+1. **Build and sync once** (the launcher pins cl-stack-code 0.14.0). `cl-stack-code --build`, so Zed gets the `initialize` reply in about a second. Then `cl-repo sync` in this checkout, so the session's Lisp image starts without installing anything.
 2. **Add the agent** to `~/.config/zed/settings.json`. The entry and its fields are in [lisp-workspace `editors/zed/`](https://github.com/egao1980/lisp-workspace/tree/main/editors/zed):
 
    ```json
@@ -195,11 +195,15 @@ The `system`/`init` event (`--output-format stream-json`) lists what was found: 
 
 The Zed demo (a seeded bug on the `demo/zed-seeded-bug` branch, fixed by cl-stack-code over ACP) is in [cl-stack-demos `harness/zed-sample`](https://github.com/egao1980/cl-stack-demos/tree/main/harness/zed-sample).
 
-### Known limits (cl-stack-code 0.12.3)
+### Model failures and limits (cl-stack-code 0.14.0)
 
-- **Slow models.** A slow local model needs longer timeouts: `OPENAI_TIMEOUT` (seconds, for a call that is not streamed) and `OPENAI_STREAM_IDLE_TIMEOUT` (the longest silence inside a stream). Use `--max-turns` to bound a run.
-- **Transport errors.** A dropped connection from the model server ("incomplete HTTP response") ends the run (exit 1). Edits made so far stay; continue the session with `-c` or `--resume ID`.
+- **Retries.** Rate limits (429, honouring `Retry-After`), overload (503 / 529), other 5xx and dropped connections are retried with backoff: 4 attempts by default. Each retry is a `system` / `retry` event in `stream-json`. Change the count with `--max-retries N`, or set `"retry": {"maxAttempts": …, "initialDelayMs": …, "maxDelayMs": …}` in settings. A rejected key (401 / 403) or an unknown model fails at once.
+- **Typed failures.** When the retries run out, or the failure can't be retried, the result names it: a `subtype` such as `error_overloaded` or `error_auth`, an `error_class` such as `model-overloaded`, and a message with no key in it. A model provider failure exits with 3, and a turn timeout with 124. Edits made so far stay. `cl-stack-code -p --continue --retry` re-sends the failed turn.
+- **Slow models.** A slow local model needs longer timeouts. Streamed calls are bounded by `OPENAI_STREAM_IDLE_TIMEOUT` (the longest silence inside a stream, 300 s by default). `OPENAI_TIMEOUT` (or `requestTimeoutMs`) bounds only a call that is not streamed. `--turn-timeout S` (`turnTimeoutMs`) bounds a whole turn, and `--max-turns` bounds a run.
+- **Long sessions.** The conversation is compacted automatically near the context window (`autoCompact`, `contextWindow`), and `/compact` compacts on demand. The rules already loaded stay loaded after a compaction.
 - **Plan mode.** Plan mode (explore, then propose a plan for you to approve) is coming.
+
+The [cl-stack-demos `harness/code-resilience`](https://github.com/egao1980/cl-stack-demos/tree/main/harness/code-resilience) demo runs each of these failures against a scripted server.
 
 ## 5. Run the agent live
 
@@ -213,7 +217,7 @@ cl-repo ros run \
 
 `cl-repo ros …` is short for `cl-repo run -- ros …`: it syncs, then starts `ros` with the source registry already set.
 
-`ask` runs over the cl-stack async HTTP backend. It retries by failure class and stops after 6 steps. For a longer-running agent, with compaction, permissions, subagents and `AGENTS.md` discovery, see the [agent harness tutorial](https://github.com/egao1980/cl-stack/blob/main/docs/tutorials/agent-harness.md).
+`ask` runs over the cl-stack async HTTP backend. Through ai-agent-protocol 0.16.0's loop, it retries rate limits, overload and transient failures (up to 4 attempts) and fails at once on a bad key. At 6 steps it makes one last call without tools, so the answer sums up what was done instead of stopping in the middle of a tool loop. For a longer-running agent, with compaction, permissions, subagents and `AGENTS.md` discovery, see the [agent harness tutorial](https://github.com/egao1980/cl-stack/blob/main/docs/tutorials/agent-harness.md).
 
 ### Choose the model provider
 
