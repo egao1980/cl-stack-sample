@@ -24,13 +24,13 @@
                (error "tests failed for ~A" (component-name c)))))
 
 (defsystem "cl-stack-sample/agent"
-  :version "0.1.0"
+  :version "0.2.0"
   :description "An ai-agent-protocol agent with the duration library as its tool"
   :depends-on ("cl-stack-sample"
-               (:version "ai-agent-protocol" "0.6.0")
-               (:version "llm-protocol" "0.4.0")
-               (:version "llm-protocol-anthropic" "0.2.0")
-               (:version "llm-protocol-openai" "0.3.1")
+               (:version "ai-agent-protocol" "0.16.0")
+               (:version "llm-protocol" "0.7.1")
+               (:version "llm-protocol-anthropic" "0.5.0")
+               (:version "llm-protocol-openai" "0.8.0")
                "json-protocol" "json-backend-jzon"
                "event-protocol" "event-backend-libuv"
                "http-backend-async"
